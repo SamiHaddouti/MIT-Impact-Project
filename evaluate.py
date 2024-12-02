@@ -1,11 +1,12 @@
 import torch
 
-from model.loss import mean_reciprocal_rank
+from model.loss import mean_reciprocal_rank_and_top_k
 
 
-def evaluate_model(model, dataloader, device):
+def evaluate_model(model, dataloader, device, k=10):
     model.eval()
     total_mrr = 0.0
+    total_top_k = 0.0
     batch_count = 0
 
     with torch.no_grad():
@@ -21,10 +22,12 @@ def evaluate_model(model, dataloader, device):
             _, predicted_indices = torch.sort(logits, descending=True)
 
             # Calculate MRR
-            batch_mrr = mean_reciprocal_rank(predicted_indices, torch.stack(padded_precursor_indexes))
+            batch_mrr, batch_top_k = mean_reciprocal_rank_and_top_k(predicted_indices, torch.stack(padded_precursor_indexes), k=10)
             total_mrr += batch_mrr
+            total_top_k += batch_top_k
             batch_count += 1
 
     avg_mrr = total_mrr / batch_count
-    print(f"Evaluation Complete. Average MRR: {avg_mrr:.4f}")
-    return avg_mrr
+    avg_top_k = total_top_k / batch_count
+    print(f"Evaluation Complete. Average MRR: {avg_mrr:.4f}. Average Top-{k} Accuracy: {avg_top_k:.4f}")
+    return avg_mrr, avg_top_k

@@ -57,28 +57,40 @@ class CustomRankLoss(nn.Module):
         return loss / batch_size
 
 
-def mean_reciprocal_rank(predicted_indices, correct_indices):
+def mean_reciprocal_rank_and_top_k(predicted_indices, correct_indices, k):
     """
-    Calculate the Mean Reciprocal Rank (MRR) for the batch.
+    Calculate the Mean Reciprocal Rank (MRR) and Top-k accuracy for the batch.
     
     Args:
         predicted_indices (torch.Tensor): Tensor of shape (batch_size, num_classes) with the predicted ranks.
         correct_indices (torch.Tensor): Tensor of shape (batch_size, num_correct) with the correct indices.
+        k (int): The top-k value for calculating Top-k accuracy.
     
     Returns:
-        float: Mean Reciprocal Rank for the batch.
+        tuple: Mean Reciprocal Rank (float), Top-k Accuracy (float) for the batch.
     """
     batch_size = predicted_indices.size(0)
     reciprocal_ranks = []
+    top_k_hits = 0
     
     for i in range(batch_size):
-        # Get the rank of the first correct index in the sorted predictions
+        # Get the correct indices as a set
         correct_index_set = set(correct_indices[i].tolist())
+        
+        # Calculate Reciprocal Rank
         for rank, idx in enumerate(predicted_indices[i].tolist(), start=1):
             if idx in correct_index_set:
                 reciprocal_ranks.append(1.0 / rank)
                 break
         else:
             reciprocal_ranks.append(0.0)  # No correct index found in the predictions
+        
+        # Calculate Top-k Accuracy
+        top_k_predictions = set(predicted_indices[i, :k].tolist())
+        if correct_index_set.intersection(top_k_predictions):
+            top_k_hits += 1
     
-    return sum(reciprocal_ranks) / batch_size
+    mrr = sum(reciprocal_ranks) / batch_size
+    top_k_accuracy = top_k_hits / batch_size
+    
+    return mrr, top_k_accuracy
