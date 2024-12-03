@@ -1,3 +1,5 @@
+from typing import List
+
 import torch
 import torch.nn as nn
 
@@ -11,7 +13,7 @@ class CustomRankLoss(nn.Module):
         super(CustomRankLoss, self).__init__()
         self.margin = margin
 
-    def forward(self, logits, padded_correct_indices):
+    def forward(self, logits: torch.Tensor, padded_correct_indices: List[torch.Tensor]) -> torch.Tensor:
         """
         Args:
             logits (torch.Tensor): Model output of shape (batch_size, num_classes).

@@ -64,10 +64,10 @@ def evaluate_model(model: SynthesisPredictionModel,
 
             # Calculate MRR
             batch_mrr = mean_reciprocal_rank(
-                predicted_indices, torch.stack(padded_precursor_indexes)
+                predicted_indices, padded_precursor_indexes
             )
             batch_top_k = top_k_accuracy(
-                predicted_indices, torch.stack(padded_precursor_indexes), k
+                predicted_indices, padded_precursor_indexes, k
             )
             total_mrr += batch_mrr
             total_top_k += batch_top_k

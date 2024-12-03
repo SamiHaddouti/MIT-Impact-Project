@@ -50,7 +50,7 @@ class TrainDataset(Dataset):
             index = -1  # Return -1 if the precursor_set is not found
         return index
     
-def train_collate_fn(batch):
+def train_collate_fn(batch: List[Tuple[np.ndarray, List[int]]]) -> Tuple[torch.Tensor, torch.Tensor]:
     target_formulas, precursor_indexes = zip(*batch)
     
     # Convert target formulas to tensors
