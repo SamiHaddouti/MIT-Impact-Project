@@ -6,6 +6,7 @@ import time
 import torch
 from torch.optim import Adam
 from torch.utils.data import DataLoader, random_split
+from torch.utils.tensorboard import SummaryWriter
 
 from model.model import SynthesisPredictionModel
 from model.dataset import TrainDataset, train_collate_fn
@@ -61,6 +62,7 @@ def main(args: argparse.Namespace) -> None:
     model.to(device)
 
     output_dir = Path(args.output_dir)
+    writer = SummaryWriter()
 
     print("Start training")
     start_time = time.time()
@@ -71,6 +73,7 @@ def main(args: argparse.Namespace) -> None:
             model, data_loader_train, criterion, optimizer, device)
         print(f"Epoch [{epoch + 1}/{args.epochs}] Complete. "
               f"Average Loss: {avg_loss:.4f}")
+        writer.add_scalar("Loss/train", avg_loss, epoch)
         elapsed_time = time.time() - start_time
         elap_str = str(datetime.timedelta(seconds=elapsed_time))
         print(f"Time elapsed: {elap_str}")
@@ -95,10 +98,14 @@ def main(args: argparse.Namespace) -> None:
         print(f"Epoch [{epoch + 1}/{args.epochs}] Evaluation Complete.")
         print(f"Average MRR: {eval_mrr:.4f}.")
         print(f"Average Top-10 Accuracy: {eval_top_k:.4f}")
+        writer.add_scalar("MRR/eval", eval_mrr, epoch)
+        writer.add_scalar("Top-10/eval", eval_top_k, epoch)
+    writer.flush()
 
     total_time = time.time() - start_time
     total_time_str = str(datetime.timedelta(seconds=int(total_time)))
     print("Total Training time {}".format(total_time_str))
+    writer.close()
     
 if __name__ == "__main__":
     parser = argparse.ArgumentParser("Training and evaluation script", 
