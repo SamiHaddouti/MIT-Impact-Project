@@ -37,16 +37,6 @@ class CustomRankLoss(nn.Module):
                     )
                 ]  # Remove correct indices
             
-            # print(f"Length of output vector: {len(logits[i])}")
-            # print(f"Length of correct indices: {len(correct_indices)}")
-            # print(correct_indices)
-            # print(f"Length of valid indices: {len(valid_indices)}")
-            # print(valid_indices)
-            # print(f"Length of correct logits: {len(correct_logits)}")
-            # print(correct_logits)
-            # print(f"Length of incorrect logits: {len(incorrect_logits)}")
-            # print("")
-            
             # Margin-based ranking loss
             # Make sure to unsqueeze dimensions for broadcasting (correct_logits: (num_correct, 1), incorrect_logits: (num_incorrect,))
             pairwise_losses = torch.relu(self.margin + incorrect_logits.unsqueeze(0) - correct_logits.unsqueeze(1))
@@ -57,40 +47,63 @@ class CustomRankLoss(nn.Module):
         return loss / batch_size
 
 
-def mean_reciprocal_rank_and_top_k(predicted_indices, correct_indices, k):
+def mean_reciprocal_rank(predicted_indices: torch.Tensor, 
+                         correct_indices: torch.Tensor) -> float:
     """
-    Calculate the Mean Reciprocal Rank (MRR) and Top-k accuracy for the batch.
+    Calculate the Mean Reciprocal Rank (MRR) for the batch.
     
     Args:
-        predicted_indices (torch.Tensor): Tensor of shape (batch_size, num_classes) with the predicted ranks.
-        correct_indices (torch.Tensor): Tensor of shape (batch_size, num_correct) with the correct indices.
-        k (int): The top-k value for calculating Top-k accuracy.
+        predicted_indices (torch.Tensor): Tensor of shape (batch_size, num_classes) 
+                                          with the predicted ranks.
+        correct_indices (torch.Tensor): Tensor of shape (batch_size, num_correct) 
+                                        with the correct indices.
     
     Returns:
-        tuple: Mean Reciprocal Rank (float), Top-k Accuracy (float) for the batch.
+        float: Mean Reciprocal Rank for the batch.
     """
     batch_size = predicted_indices.size(0)
     reciprocal_ranks = []
-    top_k_hits = 0
     
     for i in range(batch_size):
-        # Get the correct indices as a set
-        correct_index_set = set(correct_indices[i].tolist())
-        
-        # Calculate Reciprocal Rank
+        correct_index_set = set(
+            idx for idx in correct_indices[i].tolist() if idx >= 0
+            )
         for rank, idx in enumerate(predicted_indices[i].tolist(), start=1):
             if idx in correct_index_set:
                 reciprocal_ranks.append(1.0 / rank)
                 break
         else:
-            reciprocal_ranks.append(0.0)  # No correct index found in the predictions
-        
-        # Calculate Top-k Accuracy
+            reciprocal_ranks.append(0.0)
+    
+    return sum(reciprocal_ranks) / batch_size
+
+
+def top_k_accuracy(predicted_indices: torch.Tensor, 
+                   correct_indices: torch.Tensor, 
+                   k: int) -> float:
+    """
+    Calculate the Top-k accuracy for the batch.
+    
+    Args:
+        predicted_indices (torch.Tensor): Tensor of shape (batch_size, num_classes) 
+                                          with the predicted ranks.
+        correct_indices (torch.Tensor): Tensor of shape (batch_size, num_correct) 
+                                        with the correct indices.
+        k (int): The top-k value for calculating Top-k accuracy.
+    
+    Returns:
+        float: Top-k Accuracy for the batch.
+    """
+    batch_size = predicted_indices.size(0)
+    top_k_hits = 0
+    
+    for i in range(batch_size):
+        correct_index_set = set(
+            idx for idx in correct_indices[i].tolist() if idx >= 0
+            )
         top_k_predictions = set(predicted_indices[i, :k].tolist())
+        
         if correct_index_set.intersection(top_k_predictions):
             top_k_hits += 1
     
-    mrr = sum(reciprocal_ranks) / batch_size
-    top_k_accuracy = top_k_hits / batch_size
-    
-    return mrr, top_k_accuracy
+    return top_k_hits / batch_size
