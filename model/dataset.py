@@ -50,6 +50,18 @@ class TrainDataset(Dataset):
             index = -1  # Return -1 if the precursor_set is not found
         return index
     
+    def get_meanpooled_candidate_embeddings(self):
+        print("Calculating mean pooled candidate embeddings")
+        meanpooled_candidate_embeddings = []
+        for candidate in self.candidates:
+            candidate_embedding = np.mean(
+                [self.formulas_to_embedding[formula] for formula in candidate],
+                axis=0
+            )
+            meanpooled_candidate_embeddings.append(candidate_embedding)
+        meanpooled_candidate_embeddings = np.array(meanpooled_candidate_embeddings)
+        return torch.tensor(meanpooled_candidate_embeddings, dtype=torch.float32)
+
 def train_collate_fn(batch: List[Tuple[np.ndarray, List[int]]]) -> Tuple[torch.Tensor, torch.Tensor]:
     target_formulas, precursor_indexes = zip(*batch)
     

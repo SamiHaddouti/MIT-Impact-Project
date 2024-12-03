@@ -37,6 +37,7 @@ Please refer to the arguments section below for possible command line arguments.
 ## Arguments
 | Flag        | Explanation                                | Default |
 |-------------|--------------------------------------------|---------|
+| --sim_emb   | help="Use similarity ranking with meanpooled embeddings" | True |
 | --lr        | Learning rate                              | 1e-4    |
 | --epochs    | Number of epochs                           | 100     |
 | --batch_size| Batch size                                 | 16      |
