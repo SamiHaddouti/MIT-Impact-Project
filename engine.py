@@ -1,40 +1,76 @@
 import torch
+import torch.nn as nn
 from torch.optim import Adam
 from torch.utils.data import DataLoader
 
 from model.model import SynthesisPredictionModel
 from model.loss import CustomRankLoss
-from model.loss import mean_reciprocal_rank, top_k_accuracy
+from model.loss import mean_reciprocal_rank, top_k_accuracy, contrastive_loss
+
+
 
 def train_one_epoch(model: SynthesisPredictionModel,
                     data_loader: DataLoader, 
                     criterion: CustomRankLoss, 
                     optimizer: Adam, 
-                    device: torch.device) -> float:
+                    device: torch.device,
+                    ) -> float:
     model.train()
     total_loss = 0.0
     batch_count = 0
+    if isinstance(criterion, nn.TripletMarginLoss):
+        for anchor, positive, negative in data_loader:
+            anchor = torch.tensor(anchor).to(device)
+            positive = torch.tensor(positive).to(device)
+            negative = torch.tensor(negative).to(device)
 
-    for _, (target_formulas, padded_precursor_indexes) in enumerate(data_loader):
-        # Move data to the same device as the model
-        target_formulas = target_formulas.to(device)
-        padded_precursor_indexes = [
-            indices.to(device) for indices in padded_precursor_indexes
-            ]
+            anchor_emb = model(anchor)
+            positive_emb = model(positive)
+            negative_emb = model(negative)
 
-        # Forward pass
-        logits = model(target_formulas)  # Shape: (batch_size, output_dim)
+            loss = criterion(anchor_emb, positive_emb, negative_emb)
+            print("loss:", loss.item())
 
-        # Compute loss
-        loss = criterion(logits, padded_precursor_indexes)
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+    
+    if isinstance(criterion, CustomRankLoss):
+        for _, (target_formulas, padded_precursor_indexes) in enumerate(data_loader):
+            # Move data to the same device as the model
+            target_formulas = target_formulas.to(device)
+            padded_precursor_indexes = [
+                indices.to(device) for indices in padded_precursor_indexes
+                ]
+            
+            logits = model(target_formulas)  # Shape: (batch_size, output_dim)
+            
+            loss = criterion(logits, padded_precursor_indexes)
 
-        # Backward pass and optimization
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
 
         total_loss += loss.item()
         batch_count += 1
+
+    else:
+        for precursors, targets, labels in data_loader:
+            precursors = precursors.to(device)
+            targets = targets.to(device)
+            labels = labels.to(device)
+    
+            precursor_embeddings = model(precursors) 
+            target_embeddings = model(targets)       
+
+            loss = contrastive_loss(precursor_embeddings, target_embeddings, labels)
+            print("loss:", loss.item())
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+            
+            total_loss += loss.item()
+            batch_count += 1
 
     avg_loss = total_loss / batch_count
     return avg_loss

@@ -1,16 +1,18 @@
 import argparse
 import datetime
 from pathlib import Path
+from functools import partial
 import time
 
 import torch
+import torch.nn as nn
 from torch.optim import Adam
 from torch.utils.data import DataLoader, random_split
 from torch.utils.tensorboard import SummaryWriter
 
-from model.model import SynthesisPredictionModel
+from model.model import SynthesisPredictionModel, Transformer
 from model.dataset import TrainDataset, train_collate_fn
-from model.loss import CustomRankLoss, mean_reciprocal_rank, top_k_accuracy
+from model.loss import CustomRankLoss, mean_reciprocal_rank, top_k_accuracy, contrastive_loss
 from engine import evaluate_model, train_one_epoch
 
 def get_args_parser():
@@ -33,6 +35,10 @@ def get_args_parser():
                         help="Margin for the rank loss")
     parser.add_argument("--output_dir", default="",
                         help="path where to save, empty for no saving")
+    parser.add_argument("--num_layers", default=4)
+    parser.add_argument("--num_heads", default=8)
+    parser.add_argument("--ff_hidden_dim", default=256)
+    parser.add_argument("--input_dim", default=512)
     return parser
 
 
@@ -42,7 +48,10 @@ def main(args: argparse.Namespace) -> None:
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    dataset = TrainDataset()
+    dataset = TrainDataset(
+        use_criterion="contrastive",
+        sample_neg_amount=3
+        )
 
     if args.sim_emb:
         # Get meanpooled candidate embeddings
@@ -111,22 +120,33 @@ def main(args: argparse.Namespace) -> None:
         )
 
     data_loader_train = DataLoader(
-        dataset=dataset_train, 
-        batch_size=args.batch_size, 
-        shuffle=True, 
-        collate_fn=train_collate_fn)
+        dataset=dataset_train,
+        batch_size=args.batch_size,
+        shuffle=True,
+        collate_fn=partial(train_collate_fn, criterion=dataset.use_criterion)
+    )
+    
     data_loader_eval = DataLoader(
         dataset=dataset_eval, 
         batch_size=args.batch_size,
         shuffle=False,
         collate_fn=train_collate_fn)
 
-    model = SynthesisPredictionModel()
+    # model = SynthesisPredictionModel()
+
+    model = Transformer(
+        input_dim=args.input_dim,
+        num_heads=args.num_heads,
+        ff_hidden_dim=args.ff_hidden_dim,
+        num_layers=args.num_layers
+    )
     model.to(device)
 
-    optimizer = Adam(params=model.parameters(), lr=args.lr)
-    criterion = CustomRankLoss(margin=args.margin)
+    criterion = nn.TripletMarginLoss(margin=1.0, p=2)
+    criterion = contrastive_loss
+    # criterion = CustomRankLoss(margin=args.margin)
 
+    optimizer = Adam(params=model.parameters(), lr=args.lr)
     output_dir = Path(args.output_dir)
 
     print("Start training")
@@ -135,7 +155,13 @@ def main(args: argparse.Namespace) -> None:
     for epoch in range(args.epochs):
 
         avg_loss = train_one_epoch(
-            model, data_loader_train, criterion, optimizer, device)
+            model, 
+            data_loader_train, 
+            criterion, 
+            optimizer,
+            device,
+            )
+        
         print(f"Epoch [{epoch + 1}/{args.epochs}] Complete. "
               f"Average Loss: {avg_loss:.4f}")
         writer.add_scalar("Loss/train", avg_loss, epoch)
@@ -176,6 +202,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser("Training and evaluation script", 
                                      parents=[get_args_parser()])
     args = parser.parse_args()
+    args.sim_emb = False
     if args.output_dir:
         Path(args.output_dir).mkdir(parents=True, exist_ok=True)
     main(args)

@@ -2,6 +2,7 @@ from typing import List
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 class CustomRankLoss(nn.Module):
     def __init__(self, margin: float=10.0):
@@ -79,6 +80,15 @@ def mean_reciprocal_rank(predicted_indices: torch.Tensor,
     
     return sum(reciprocal_ranks) / batch_size
 
+def contrastive_loss(precursors: List[torch.Tensor]=None, targets: List[torch.Tensor]=None, labels: List[torch.Tensor]=None, margin: float=1.0) -> torch.Tensor:
+    distances = F.pairwise_distance(precursors, targets)
+
+    positive_loss = labels * distances**2
+
+    negative_loss = (1 - labels) * torch.clamp(margin - distances, min=0.0)**2
+
+    loss = torch.mean(positive_loss + negative_loss)
+    return loss
 
 def top_k_accuracy(predicted_indices: torch.Tensor, 
                    correct_indices: torch.Tensor, 
